@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link type="text/css" rel="stylesheet" href="https://bootswatch.com/5/quartz/bootstrap.min.css">
+</head>
+<body>
+<div id="app">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Todo List</a>
+        </div>
+        <div class="d-flex" style="padding-right: 20px;" v-if="state === 'tasks'">
+            <b>{{ loginName }}</b>
+        </div>
+        <div class="d-flex" style="padding-right: 20px;" v-if="state === 'tasks'">
+            <button @click="logout()" class="btn btn-warning btn-sm">Logout</button>
+        </div>
+    </nav>
+    <div class="container mt-5">
+        <div v-if="state === 'loading'">
+            <h2>Loading...</h2>
+        </div>
+        <div v-if="state === 'login'">
+            <h2>Login</h2>
+            <form @submit.prevent="login()">
+                <label>Username</label><br>
+                <input v-model="username" class="form-control"><br><br>
+                <label>Password</label><br>
+                <input v-model="password" class="form-control" type="password"><br><br>
+                <button type="submit" class="btn btn-primary">Login</button>
+            </form><br>
+            <a href="" @click.prevent="state = 'register'">No Account yet? Register now!</a>
+        </div>
+        <div v-if="state === 'register'">
+            <h2>Register</h2>
+            <form @submit.prevent="register()">
+                <label>Username</label><br>
+                <input v-model="username" class="form-control"><br><br>
+                <label>Password</label><br>
+                <input v-model="password" class="form-control" type="password"><br><br>
+                <button type="submit" class="btn btn-primary">Register</button>
+            </form><br>
+            <a href="" @click.prevent="state = 'login'">Back to Login</a>
+        </div>
+        <div v-if="state === 'tasks'">
+            <h2 class="mt-3">Tasks</h2>
+            <ul class="list-group">
+                <li v-for="task in tasks" :key="task.id" class="list-group-item d-flex justify-content-between align-items-center">
+                    <input type="checkbox" :checked="task.done" @input="e => updateTask(task.id, e.target.checked)" class="form-check-input"> {{ task.text }} <button @click="deleteTask(task.id)" class="btn btn-danger btn-sm">Delete</button>
+                </li>
+            </ul>
+            <h2 class="mt-3">New Task</h2>
+            <form @submit.prevent="createTask()">
+                <label>Text</label><br>
+                <input v-model="newTaskText" class="form-control"><br>
+                <button type="submit" class="btn btn-primary">Add</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script>
+const API_URL = '/api'
+
+const app = new Vue({
+    el: '#app',
+    data: () => ({
+        state: 'loading',
+        tasks: [
+            {
+                id: 1,
+                text: 'First Task',
+                done: false
+            },
+            {
+                id: 2,
+                text: 'Second Task',
+                done: true
+            }
+        ],
+        username: '',
+        password: '',
+        newTaskText: ''
+    }),
+    created() {
+        this.loadTasks()
+    },
+    computed: {
+        loginName() {
+            return JSON.parse(atob(localStorage.getItem('token').split('.')[1])).sub
+        }
+    },
+    methods: {
+        loadTasks() {
+            axios.get(API_URL + '/tasks', { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } }).then(res => {
+                this.tasks = res.data
+                this.state = 'tasks'
+            }, err => {
+                if(err.response && err.response.status === 401) {
+                    localStorage.removeItem('token')
+                    this.state = 'login'
+                    return
+                }
+                alert(err.message)
+            })
+        },
+        login() {
+            this.state = 'loading'
+            axios.post(API_URL + '/login', { username: this.username, password: this.password }, { responseType: 'text' }).then(res => {
+                localStorage.setItem('token', res.data.token)
+                this.state = 'loading'
+                this.password = ''
+                this.loadTasks()
+            }, () => this.state = 'login')
+        },
+        register() {
+            axios.post(API_URL + '/register', { username: this.username, password: this.password }).then(res => {
+                this.password = ''
+                this.state = 'login'
+            }, () => this.state = 'register')
+        },
+        logout() {
+            localStorage.removeItem('token')
+            this.state = 'login'
+        },
+        createTask() {
+            axios.post(API_URL + '/tasks', { text: this.newTaskText }, { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } }).then(res => {
+                this.tasks.push((res.data))
+                this.newTaskText = ''
+            })
+        },
+        updateTask(id, done) {
+            axios.put(API_URL + '/tasks/' + id, { done }, { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } }).then(res => {
+                this.tasks.filter(t => t.id === id).forEach(t => t.done = res.data.done)
+                this.tasks = [...this.tasks] // Dirty way to force vue into updating
+            })
+        },
+        deleteTask(id) {
+            axios.delete(API_URL + '/tasks/' + id, { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } }).then(res => {
+                this.tasks = this.tasks.filter(t => t.id !== id)
+            })
+        }
+    }
+})
+</script>
+</body>
+</html>
